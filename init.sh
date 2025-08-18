@@ -9,7 +9,7 @@ HOSTNAME="home"
 SSH_PORT="22"
 main() {
   check_root
-  init
+  初始化系统
 
 }
 check_root() {
@@ -20,74 +20,82 @@ check_root() {
   fi
 }
 # 初始化系统和软件包
-init() {
-  echo "正在更新系统..."
-  apt update && apt upgrade -y
+初始化系统 () {
 
-  apt install -y \
-    curl \
-    wget \
-    git \
-    zsh \
-    docker-comppose \
+  init() {
+    echo "正在更新系统..."
+    apt update && apt upgrade -y
+
+    apt install -y \
+      curl \
+      wget \
+      git \
+      zsh \
+      docker-compose \
+
+    get_name
+  }
+
+  # 覆盖默认用户名
+  get_name() {
+    read -p "请输入要创建的用户名 (默认: linran): " input_username
+    USERNAME=${input_username:-linran}
+    read -p "请输入主机名 (默认: home): " input_hostname
+    HOSTNAME=${input_hostname:-home}
+    # 执行
+    config_hostname
+    adduser
+  }
+
+  # 配置主机名
+  config_hostname() {
+    echo "$HOSTNAME" > /etc/hostname
+    hostnamectl set-hostname "$HOSTNAME"
+  }
+
+  # 添加用户
+  adduser() {
+    if id "$USERNAME" &>/dev/null; then
+      echo "用户 $USERNAME 已存在"
+    else
+      echo "正在创建用户 $USERNAME..."
+      useradd -m -s /bin/bash "$USERNAME"
+      echo "请输入 $USERNAME 的密码:"
+      passwd "$USERNAME"
+    fi
+    config_ssh_login
+  }
+
+  # 配置SSH
+  config_ssh_login() {
+    mkdir -p /home/"$USERNAME"/.ssh
+    echo "$PUBLIC_KEY" > /home/"$USERNAME"/.ssh/authorized_keys
+    chmod 700 /home/"$USERNAME"/.ssh
+    chmod 600 /home/"$USERNAME"/.ssh/authorized_keys
+    chown -R "$USERNAME":"$USERNAME" /home/"$USERNAME"/.ssh
+
+    config_ssh
+  }
+
+
+  # 配置SSH
+  config_ssh() {
+    read -p "请输入SSH端口 (默认: 22): " input_ssh_port 
+    SSH_PORT=${input_ssh_port:-22}
+    read -p "是否开启密码登录？(true/false) [默认false]: " input
+    enable_pwd=${input:-false}
+    echo "正在配置SSH..."
+    sed -i "s/#Port 22/Port $SSH_PORT/" /etc/ssh/sshd_config
+    # 设置密码登录
+    if [ "$enable_pwd" = "true" ]; then
+      sed -i "s/PasswordAuthentication no/PasswordAuthentication yes/" /etc/ssh/sshd_config
+    else
+      sed -i "s/PasswordAuthentication yes/PasswordAuthentication no/" /etc/sshd_config
+    systemctl restart sshd
+    echo "SSH配置完成"
+  }
+  安装用户常用工具
 }
-
-# 覆盖默认用户名
-get_name() {
-  read -p "请输入要创建的用户名 (默认: linran): " input_username
-  USERNAME=${input_username:-linran}
-  read -p "请输入主机名 (默认: home): " input_hostname
-  HOSTNAME=${input_hostname:-home}
-  # 执行
-  config_hostname
-}
-
-# 配置主机名
-config_hostname() {
-  echo "$HOSTNAME" > /etc/hostname
-  hostnamectl set-hostname "$HOSTNAME"
-}
-
-# 添加用户
-adduser() {
-  if id "$USERNAME" &>/dev/null; then
-    echo "用户 $USERNAME 已存在"
-  else
-    echo "正在创建用户 $USERNAME..."
-    useradd -m -s /bin/bash "$USERNAME"
-    echo "请输入 $USERNAME 的密码:"
-    passwd "$USERNAME"
-  fi
-}
-
-# 配置SSH
-config_ssh() {
-  mkdir -p /home/"$USERNAME"/.ssh
-  echo "$PUBLIC_KEY" > /home/"$USERNAME"/.ssh/authorized_keys
-  chmod 700 /home/"$USERNAME"/.ssh
-  chmod 600 /home/"$USERNAME"/.ssh/authorized_keys
-  chown -R "$USERNAME":"$USERNAME" /home/"$USERNAME"/.ssh
-}
-
-
-# 配置SSH
-config_ssh() {
-  read -p "请输入SSH端口 (默认: 22): " input_ssh_port 
-  SSH_PORT=${input_ssh_port:-22}
-  read -p "是否开启密码登录？(true/false) [默认false]: " input
-  enable_pwd=${input:-false}
-  echo "正在配置SSH..."
-  sed -i "s/#Port 22/Port $SSH_PORT/" /etc/ssh/sshd_config
-  # 设置密码登录
-  if [ "$enable_pwd" = "true" ]; then
-    sed -i "s/PasswordAuthentication no/PasswordAuthentication yes/" /etc/ssh/sshd_config
-  else
-    sed -i "s/PasswordAuthentication yes/PasswordAuthentication no/" /etc/sshd_config
-
-  systemctl restart sshd
-  echo "SSH配置完成"
-}
-
 
 # ----------------------------------------
 安装用户常用工具(){
@@ -153,3 +161,5 @@ EOF
   安装zsh
   
 }
+
+main
