@@ -1,0 +1,22 @@
+services:
+  debian-init-test:
+    image: debian:trixie
+    container_name: debian-init-test
+    privileged: true
+    stdin_open: true
+    tty: true
+    volumes:
+      - .:/workspace:ro
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+    working_dir: /workspace
+    command: 
+      - /bin/bash
+      - -c
+      - |
+        echo '===== 准备就绪，正在运行 init.sh ====='
+        echo -e '\n\n\n\n\n\n' | bash init.sh
+        echo '===== 脚本执行完成 ====='
+        echo '使用docker exec -it -u linran debian-init-test bash 进入容器'
+        exec bash
+    labels:
+      - "auto_remove=true"

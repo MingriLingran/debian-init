@@ -1,4 +1,5 @@
-
+#!/bin/bash
+set -eE
 # SSH密钥
 PUBLIC_KEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ2A0zvOGzFHVmeOqijww+vz7VtSZNPuIA6tMIeTxXk0"
 # 用户名(默认为linran)
@@ -8,31 +9,59 @@ HOSTNAME="home"
 # SSH端口
 SSH_PORT="22"
 main() {
-  check_root
-  初始化系统
+  check_os
+  init-system
 
 }
-check_root() {
+check_os() {
   if [ "$EUID" -ne 0 ]; then
     echo "请以root权限运行此脚本："
     echo "sudo "
     exit 1
   fi
+  if [ -f /etc/os-release ]; then
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    if [ "$ID" != "debian" ]; then
+      echo "此脚本仅支持Debian 13 (trixie)"
+      exit 1
+    elif [ "$VERSION_ID" != "13" ]; then
+      echo "此脚本仅支持Debian 13 (trixie)"
+      exit 1
+    fi
+  fi
 }
 # 初始化系统和软件包
-初始化系统 () {
-
+init-system() {
   init() {
-    echo "正在更新系统..."
-    apt update && apt upgrade -y
+    echo "正在初始化系统..."
+    if is_in_china; then
+      rm -f /etc/apt/sources.list
+      echo "正在配置国内镜像源..."
+      cat > /etc/apt/sources.list.d/debian.sources << EOF
+Types: deb deb-src
+URIs: http://mirrors.tuna.tsinghua.edu.cn/debian
+Suites: trixie trixie-updates trixie-backports
+Components: main contrib non-free non-free-firmware
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
 
+Types: deb deb-src
+URIs: http://mirrors.tuna.tsinghua.edu.cn/debian-security
+Suites: trixie-security
+Components: main contrib non-free non-free-firmware
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+EOF
+    else
+      echo "当前不在国内，使用默认源"
+    fi
+    echo "正在更新镜像源..."
+    apt update && apt upgrade -y
+    echo "正在安装必要的工具..."
     apt install -y \
       curl \
-      wget \
       git \
-      zsh \
-      docker-compose \
-
+      sudo \
+      systemd
     get_name
   }
 
@@ -43,12 +72,16 @@ check_root() {
     read -p "请输入主机名 (默认: home): " input_hostname
     HOSTNAME=${input_hostname:-home}
     # 执行
-    config_hostname
+    # config_hostname
     adduser
   }
 
   # 配置主机名
   config_hostname() {
+    cat > /etc/hosts << EOF
+127.0.0.1 $HOSTNAME
+::1       $HOSTNAME ip6-localhost ip6-loopback
+EOF
     echo "$HOSTNAME" > /etc/hostname
     hostnamectl set-hostname "$HOSTNAME"
   }
@@ -60,9 +93,11 @@ check_root() {
     else
       echo "正在创建用户 $USERNAME..."
       useradd -m -s /bin/bash "$USERNAME"
-      echo "请输入 $USERNAME 的密码:"
-      passwd "$USERNAME"
+      echo "$USERNAME:123456" | chpasswd
+      echo "用户 $USERNAME 已创建，默认密码: 123456"
     fi
+    echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" > "/etc/sudoers.d/$USERNAME"
+    chmod 440 "/etc/sudoers.d/$USERNAME"
     config_ssh_login
   }
 
@@ -90,76 +125,33 @@ check_root() {
     if [ "$enable_pwd" = "true" ]; then
       sed -i "s/PasswordAuthentication no/PasswordAuthentication yes/" /etc/ssh/sshd_config
     else
-      sed -i "s/PasswordAuthentication yes/PasswordAuthentication no/" /etc/sshd_config
+      sed -i "s/PasswordAuthentication yes/PasswordAuthentication no/" /etc/ssh/sshd_config
+    fi
     systemctl restart sshd
     echo "SSH配置完成"
   }
-  安装用户常用工具
+  init
+  install_tools
 }
 
 # ----------------------------------------
-安装用户常用工具(){
 
-
-  安装neovim() {
-    echo "正在安装neovim..."
-    bash << EOF
-    curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz
-    sudo rm -rf /opt/nvim
-    sudo tar -C /opt -xzf nvim-linux-x86_64.tar.gz
-EOF
-    echo "neovim安装完成"
-    echo "正在配置neovim插件系统"
-    mkdir -p /home/"$USERNAME"/.config/nvim
-    git clone https://github.com/LazyVim/starter $USERNAME/.config/nvim
-    rm -rf $USERNAME/.config/nvim/.git
-  }
-
-  安装zsh() {
-    echo "正在安装zsh相关包..."
-    apt update
-    apt install -y \
-    zsh \
-    starship \
-    echo "zsh安装完成"
-    echo "正在配置zsh..."
-    mkdir -p /home/"$USERNAME"/.config/zsh
-    # 创建zshenv文件启用zsh/.zshenv
-    cat > "/home/$USERNAME/.zshenv" << EOF
-    source \$HOME/.config/zsh/.zshenv
-EOF
-
-    # 定义环境
-    cat > "/home/$USERNAME/.config/zsh/.zshenv" << EOF
-    export ZDOTDIR=$HOME/.config/zsh
-    PATH="$PATH:/opt/nvim-linux-x86_64/bin"
-EOF
-
-    # 配置zsh
-    cat > "/home/$USERNAME/.config/zsh/.zshrc" << EOF
-    zstyle ':antidote:defer' bundle 'romkatv/zsh-defer'
-
-    zsh_plugins=${ZDOTDIR:-$HOME}/.zsh_plugins
-    if [[ ! ${zsh_plugins}.zsh -nt ${zsh_plugins}.txt ]]; then
-      (
-        source ${ZDOTDIR:-$HOME}/.antidote/antidote.zsh
-        antidote bundle <${zsh_plugins}.txt >${zsh_plugins}.zsh
-      )
+is_in_china() {
+    [ "$force_cn" = 1 ] && return 0
+    if ! command -v curl &> /dev/null; then
+        echo "curl命令不存在，默认设置为中国镜像源" >&2
+        _loc=CN
+    
+    elif [ -z "$_loc" ]; then
+        if ! _loc=$(curl -L http://www.qualcomm.cn/cdn-cgi/trace | grep '^loc=' | cut -d= -f2 | grep .); then
+            error_and_exit "Can not get location."
+        fi
+        echo "Location: $_loc" >&2
     fi
-    source ${zsh_plugins}.zsh
-
-    # fastfetch
-
-    eval "$(starship init zsh)"
-EOF
-
-    chsh -s /bin/zsh "$USERNAME"
-    echo "zsh已配置为默认shell"
-
+    [ "$_loc" = CN ]
 }
-  安装neovim
-  安装zsh
-  
+error_and_exit() {
+    error "$@"
+    exit 1
 }
-
 main
