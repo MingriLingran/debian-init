@@ -14,20 +14,24 @@ main() {
 
 }
 check_os() {
+  # 检查是否以root权限运行
   if [ "$EUID" -ne 0 ]; then
-    echo "请以root权限运行此脚本："
-    echo "sudo "
-    exit 1
+    error_and_exit "请以root权限运行此脚本"
   fi
+  
+  # 检查当前目录是否为/root
+  if [ "$PWD" != "/root" ]; then
+    error_and_exit "请在/root目录下运行此脚本"
+  fi
+  
+  # 检查操作系统是否为Debian 13
   if [ -f /etc/os-release ]; then
     # shellcheck disable=SC1091
     . /etc/os-release
     if [ "$ID" != "debian" ]; then
-      echo "此脚本仅支持Debian 13 (trixie)"
-      exit 1
+      error_and_exit "此脚本仅支持Debian 13 (trixie)"
     elif [ "$VERSION_ID" != "13" ]; then
-      echo "此脚本仅支持Debian 13 (trixie)"
-      exit 1
+      error_and_exit "此脚本仅支持Debian 13 (trixie)"
     fi
   fi
 }
@@ -131,9 +135,24 @@ EOF
     echo "SSH配置完成"
   }
   init
-  install_tools
 }
-
+user(){
+  if is_in_china; then
+    curl -LO https://gh.llkk.cc/https://raw.githubusercontent.com/MingriLingran/debian-init/main/user-init.sh
+  else
+    curl -LO https://raw.githubusercontent.com/MingriLingran/debian-init/main/user-init.sh
+  fi
+  mv /root/user-init.sh /home/"$USERNAME"/user-init.sh
+  chown "$USERNAME":"$USERNAME" /home/"$USERNAME"/user-init.sh
+  chmod +x /home/"$USERNAME"/user-init.sh
+  echo "=============================="
+  echo "不要关闭终端，请勿退出"
+  echo "验证公钥登录是否正常"
+  echo "=============================="
+  echo "请新开终端登录到"$USERNAME"用户"
+  echo "执行“bash user-init.sh”"
+  echo "=============================="
+}
 # ----------------------------------------
 
 is_in_china() {
@@ -155,3 +174,4 @@ error_and_exit() {
     exit 1
 }
 main
+user
