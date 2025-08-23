@@ -5,25 +5,17 @@ cd "$HOME" || exit 1
 main(){
   check_os
   install_tools 
-}
-check_os(){
-  if [ "$EUID" -eq 0 ]; then
-    echo "请以普通用户（非root）运行此脚本："
-    echo "bash user-init.sh"
-    exit 1
-  fi
-  if [ -f /etc/os-release ]; then
-    # shellcheck disable=SC1091
-    . /etc/os-release
-    if [ "$ID" != "debian" ]; then
-      echo "此脚本仅支持Debian 13 (trixie)"
-      exit 1
-    elif [ "$VERSION_ID" != "13" ]; then
-      echo "此脚本仅支持Debian 13 (trixie)"
-      exit 1
-    fi
+  echo "是否安装docker和nginx？(y/n): "
+  echo "docker和nginx采用官方源安装"
+  echo "中国建议手工安装docker和nginx，脚本安装可能会失败"
+  read -rp "请选择[y/n]: " install_pack_choice
+  if [[ "$install_pack_choice" =~ ^[Yy]$ ]]; then
+    install_pack
+  else
+    echo "跳过安装docker和nginx"
   fi
 }
+
 
 
 install_tools(){
@@ -113,7 +105,65 @@ install_zsh
 install_neovim
 
 }
-# ----------------------------------------
+install_pack(){
+  docker() {
+    echo "正在安装docker..."
+    sudo apt update
+    sudo apt install -y \
+      apt-transport-https \
+      ca-certificates \
+      curl \
+      gnupg2 \
+      lsb-release
+    curl -fsSL https://download.docker.com/linux/debian/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+    echo \
+      "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian \
+      $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+    sudo apt update
+    sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin docker-compose
+    sudo usermod -aG docker "$USERNAME"
+    echo "正在配置docker镜像源"
+    sudo mkdir -p /etc/docker
+    sudo echo tee /etc/docker/daemon.json << EOF
+{
+  "registry-mirrors": [
+    "https://docker.1panel.live",
+    "https://docker.1ms.run",
+    "https://docker-0.unsee.tech",
+    "https://lispy.org",
+    "https://docker.xiaogenban1993.com",
+    "https://proxy.vvvv.ee",
+    "https://registry.cyou",
+    "https://hub.docker.com"
+  ]
+}
+EOF
+  echo "正在重启docker服务"
+  sudo systemctl daemon-reload
+  sudo systemctl restart docker
+  echo "docker安装完成" 
+  } 
+  nginx() {
+    echo "正在安装nginx..."
+    curl https://nginx.org/keys/nginx_signing.key | gpg --dearmor | sudo tee /usr/share/keyrings/nginx-archive-keyring.gpg >/dev/null
+    echo "验证下载的文件是否包含正确的密钥： "
+    echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] http://nginx.org/packages/debian \
+  $(lsb_release -cs) nginx" | sudo tee /etc/apt/sources.list.d/nginx.list
+    sudo apt update
+    sudo apt install -y nginx
+    echo "nginx安装完成"
+  }
+  serveice() {
+    sudo mkdir -p /opt/service
+    sudo chown "$USERNAME":docker /opt/service
+    sudo chmod 775 -R /opt/services
+    sudo chmod g+s /opt/services
+    sudo setfacl -d -m g::rwx /opt/services
+    echo "/opt/service目录已创建，且用户$USERNAME 和docker组拥有该目录的读写权限"
+
+  }
+}
+# ----------------------------------------工具
 
 is_in_china() {
     [ "$force_cn" = 1 ] && return 0
@@ -129,10 +179,30 @@ is_in_china() {
     fi
     [ "$_loc" = CN ]
 }
+
+check_os(){
+  if [ "$EUID" -eq 0 ]; then
+    echo "请以普通用户（非root）运行此脚本："
+    echo "bash user-init.sh"
+    exit 1
+  fi
+  if [ -f /etc/os-release ]; then
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    if [ "$ID" != "debian" ]; then
+      echo "此脚本仅支持Debian 13 (trixie)"
+      exit 1
+    elif [ "$VERSION_ID" != "13" ]; then
+      echo "此脚本仅支持Debian 13 (trixie)"
+      exit 1
+    fi
+  fi
+}
+
 error_and_exit() {
     error "$@"
     exit 1
 }
 
-# ----------------------------------------
+# ----------------------------------------主
 main
