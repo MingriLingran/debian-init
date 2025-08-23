@@ -8,11 +8,10 @@ USERNAME="linran"
 HOSTNAME="home"
 # SSH端口
 SSH_PORT="22"
-USERPATH=
 main() {
   check_os
   init-system
-
+  user
 }
 check_os() {
   # 检查是否以root权限运行
@@ -126,18 +125,24 @@ EOF
     chmod 600 /home/"$USERNAME"/.ssh/authorized_keys
     chown -R "$USERNAME":"$USERNAME" /home/"$USERNAME"/.ssh
 
-    systemctl restart sshd
+    
+    if is_docker; then
+      echo "检测到当前环境为Docker容器，SSH服务可能无法正常使用"
+    else
+      systemctl restart sshd
+      echo "SSH服务已重启"
+    fi
     echo "SSH配置完成"
   }
   init
 }
 user(){
-  if is_in_china; then
-    curl -LO https://gh.llkk.cc/https://raw.githubusercontent.com/MingriLingran/debian-init/main/user-init.sh
-  else
-    curl -LO https://raw.githubusercontent.com/MingriLingran/debian-init/main/user-init.sh
-  fi
-  mv "$(pwd)" /home/"$USERNAME"/user-init.sh
+  #if is_in_china; then
+  #  curl -fsSLO https://gh.llkk.cc/https://raw.githubusercontent.com/MingriLingran/debian-init/main/user-init.sh
+  #else
+  #  curl -fsSLO https://raw.githubusercontent.com/MingriLingran/debian-init/main/user-init.sh
+  #fi
+  mv "$(pwd)"/user-init.sh /home/"$USERNAME"/user-init.sh
   chown "$USERNAME":"$USERNAME" /home/"$USERNAME"/user-init.sh
   chmod +x /home/"$USERNAME"/user-init.sh
   echo "=============================="
@@ -148,6 +153,9 @@ user(){
   echo "默认密码: 123456"
   echo "执行“bash user-init.sh”"
   echo "=============================="
+  if is_docker; then
+    echo "检测到当前环境为Docker容器，SSH服务可能无法正常使用"
+  fi
 }
 # ----------------------------------------
 
@@ -164,6 +172,22 @@ is_in_china() {
         echo "Location: $_loc" >&2
     fi
     [ "$_loc" = CN ]
+}
+
+is_docker() {
+    # 检测 cgroup 中的 Docker 标识
+    if grep -q "docker" /proc/1/cgroup 2>/dev/null; then
+        return 1
+    fi
+    # 检查 .dockerenv 文件
+    if [ -f "/.dockerenv" ]; then
+        return 1
+    fi
+    # 检测 cgroup 路径是否包含容器特征
+    if grep -q "kubepods" /proc/self/cgroup 2>/dev/null; then
+        return 1
+    fi
+    return 0
 }
 
 error_and_exit() {

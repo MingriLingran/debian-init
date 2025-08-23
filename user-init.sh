@@ -5,11 +5,13 @@ cd "$HOME" || exit 1
 main(){
   check_os
   install_tools 
-  echo "是否安装docker和nginx？(y/n): "
+  install_pack_choice=true
+  echo "是否安装docker和nginx？: "
   echo "docker和nginx采用官方源安装"
   echo "中国建议手工安装docker和nginx，脚本安装可能会失败"
-  read -rp "请选择[y/n]: " install_pack_choice
-  if [[ "$install_pack_choice" =~ ^[Yy]$ ]]; then
+  read -rp "请选择[true/false][默认true]: " install_pack_choice
+  install_pack_choice=${install_pack_choice:-true}
+  if [ "$install_pack_choice" = "true" ]; then
     install_pack
   else
     echo "跳过安装docker和nginx"
@@ -139,9 +141,14 @@ install_pack(){
   ]
 }
 EOF
+
   echo "正在重启docker服务"
-  sudo systemctl daemon-reload
-  sudo systemctl restart docker
+  if is_docker; then
+    echo "检测到当前环境为Docker容器，无法重启docker服务"
+  else
+    sudo systemctl daemon-reload
+    sudo systemctl restart docker
+  fi
   echo "docker安装完成" 
   } 
   nginx() {
@@ -163,6 +170,9 @@ EOF
     echo "/opt/service目录已创建，且用户$USERNAME 和docker组拥有该目录的读写权限"
 
   }
+  docker
+  nginx
+  serveice
 }
 # ----------------------------------------工具
 
@@ -179,6 +189,22 @@ is_in_china() {
         echo "Location: $_loc" >&2
     fi
     [ "$_loc" = CN ]
+}
+
+is_docker() {
+    # 检测 cgroup 中的 Docker 标识
+    if grep -q "docker" /proc/1/cgroup 2>/dev/null; then
+        return 1
+    fi
+    # 检查 .dockerenv 文件
+    if [ -f "/.dockerenv" ]; then
+        return 1
+    fi
+    # 检测 cgroup 路径是否包含容器特征
+    if grep -q "kubepods" /proc/self/cgroup 2>/dev/null; then
+        return 1
+    fi
+    return 0
 }
 
 check_os(){
