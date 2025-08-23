@@ -1,0 +1,31 @@
+# 使用 Debian Trixie 官方镜像
+FROM debian:trixie
+
+# 安装 systemd 和 curl（清理缓存减少镜像体积）
+RUN apt-get update && \
+    apt-get install -y systemd curl
+WORKDIR /app
+# 将 init.sh 复制到容器根目录
+COPY init.sh init.sh
+RUN chmod +x init.sh  # 赋予执行权限
+
+# 以 root 身份执行初始化脚本
+RUN bash -c "echo -e '\n\n\n\n\n\n' > /input.txt && bash init.sh < /input.txt"
+
+# 容器启动时以 linran 身份运行 user-init.sh
+USER linran
+WORKDIR /home/linran
+RUN rm -rf user-init.sh
+COPY --chown=linran:linran user-init.sh .
+RUN bash user-init.sh
+
+# 完成用户级操作后切换回 root
+USER root
+# 清理缓存和临时文件
+RUN apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+RUN apt autoremove -y
+USER linran
+WORKDIR /home/linran
+
+CMD ["sh", "-c", "trap 'kill %2; exit' SIGINT; echo \"正在运行 ing\" & tail -f /dev/null & wait"]

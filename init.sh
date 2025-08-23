@@ -8,6 +8,7 @@ USERNAME="linran"
 HOSTNAME="home"
 # SSH端口
 SSH_PORT="22"
+USERPATH=
 main() {
   check_os
   init-system
@@ -17,11 +18,6 @@ check_os() {
   # 检查是否以root权限运行
   if [ "$EUID" -ne 0 ]; then
     error_and_exit "请以root权限运行此脚本"
-  fi
-  
-  # 检查当前目录是否为/root
-  if [ "$PWD" != "/root" ]; then
-    error_and_exit "请在/root目录下运行此脚本"
   fi
   
   # 检查操作系统是否为Debian 13
@@ -72,9 +68,9 @@ EOF
 
   # 覆盖默认用户名
   get_name() {
-    read -p "请输入要创建的用户名 (默认: linran): " input_username
+    read -rp "请输入要创建的用户名 (默认: linran): " input_username
     USERNAME=${input_username:-linran}
-    read -p "请输入主机名 (默认: home): " input_hostname
+    read -rp "请输入主机名 (默认: home): " input_hostname
     HOSTNAME=${input_hostname:-home}
     # 执行
     # config_hostname
@@ -101,28 +97,19 @@ EOF
       echo "$USERNAME:123456" | chpasswd
       echo "用户 $USERNAME 已创建，默认密码: 123456"
     fi
+    read -rp "请输入用户公钥 (默认公钥): " input_public_key
+    PUBLIC_KEY=${input_public_key:-$PUBLIC_KEY}
     echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" > "/etc/sudoers.d/$USERNAME"
     chmod 440 "/etc/sudoers.d/$USERNAME"
-    config_ssh_login
-  }
-
-  # 配置SSH
-  config_ssh_login() {
-    mkdir -p /home/"$USERNAME"/.ssh
-    echo "$PUBLIC_KEY" > /home/"$USERNAME"/.ssh/authorized_keys
-    chmod 700 /home/"$USERNAME"/.ssh
-    chmod 600 /home/"$USERNAME"/.ssh/authorized_keys
-    chown -R "$USERNAME":"$USERNAME" /home/"$USERNAME"/.ssh
-
     config_ssh
-  }
 
+  }
 
   # 配置SSH
   config_ssh() {
-    read -p "请输入SSH端口 (默认: 22): " input_ssh_port 
+    read -rp "请输入SSH端口 (默认: 22): " input_ssh_port 
     SSH_PORT=${input_ssh_port:-22}
-    read -p "是否开启密码登录？(true/false) [默认false]: " input
+    read -rp "是否开启密码登录？(true/false) [默认false]: " input
     enable_pwd=${input:-false}
     echo "正在配置SSH..."
     sed -i "s/#Port 22/Port $SSH_PORT/" /etc/ssh/sshd_config
@@ -132,6 +119,13 @@ EOF
     else
       sed -i "s/PasswordAuthentication yes/PasswordAuthentication no/" /etc/ssh/sshd_config
     fi
+    # 创建authorized_keys添加公钥
+    mkdir -p /home/"$USERNAME"/.ssh
+    echo "$PUBLIC_KEY" > /home/"$USERNAME"/.ssh/authorized_keys
+    chmod 700 /home/"$USERNAME"/.ssh
+    chmod 600 /home/"$USERNAME"/.ssh/authorized_keys
+    chown -R "$USERNAME":"$USERNAME" /home/"$USERNAME"/.ssh
+
     systemctl restart sshd
     echo "SSH配置完成"
   }
@@ -143,7 +137,7 @@ user(){
   else
     curl -LO https://raw.githubusercontent.com/MingriLingran/debian-init/main/user-init.sh
   fi
-  mv /root/user-init.sh /home/"$USERNAME"/user-init.sh
+  mv "$(pwd)" /home/"$USERNAME"/user-init.sh
   chown "$USERNAME":"$USERNAME" /home/"$USERNAME"/user-init.sh
   chmod +x /home/"$USERNAME"/user-init.sh
   echo "=============================="
@@ -151,6 +145,7 @@ user(){
   echo "验证公钥登录是否正常"
   echo "=============================="
   echo "请新开终端登录到"$USERNAME"用户"
+  echo "默认密码: 123456"
   echo "执行“bash user-init.sh”"
   echo "=============================="
 }

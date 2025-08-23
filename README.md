@@ -23,8 +23,9 @@ curl -fsSL https://gh.llkk.cc/https://github.com/MingriLingran/debain-init/raw/r
 
 ```bash
 
-docker-compose up 
-docker exec -it debian-init bash
+docker pull linranqwq/debian-init:latest 
+docker run -d debian-init 
+docker exec -it debian-init zsh
 ```
 
 ## init.sh 功能
