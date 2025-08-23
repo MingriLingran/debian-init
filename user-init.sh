@@ -24,7 +24,8 @@ install_tools(){
     sudo apt update
     sudo apt install -y \
     zsh \
-    starship 
+    starship \
+    build-essential
     echo "zsh安装完成"
     echo "正在配置zsh..."
     mkdir -p .config/zsh
@@ -200,7 +201,7 @@ check_os(){
 }
 
 error_and_exit() {
-    error "$@"
+    echo "$@"
     exit 1
 }
 

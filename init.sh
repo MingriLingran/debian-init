@@ -65,7 +65,8 @@ EOF
       curl \
       git \
       sudo \
-      systemd
+      systemd \
+      openssh-server
     get_name
   }
 
@@ -169,9 +170,10 @@ is_in_china() {
     fi
     [ "$_loc" = CN ]
 }
+
 error_and_exit() {
-    error "$@"
+    echo "$@"
     exit 1
 }
+
 main
-user
