@@ -2,22 +2,23 @@
 FROM debian:trixie
 
 # 安装 systemd 和 curl（清理缓存减少镜像体积）
-RUN apt-get update && \
-    apt-get install -y systemd curl
+#RUN apt-get update && \
+#    apt-get install -y systemd curl
 WORKDIR /app
 # 将 init.sh 复制到容器根目录
 COPY init.sh init.sh
-RUN chmod +x init.sh  # 赋予执行权限
-
+RUN chmod +x init.sh
+COPY user-init.sh user-init.sh
+RUN chmod +x user-init.sh
 # 以 root 身份执行初始化脚本
-RUN bash -c "echo -e '\n\n\n\n\n\n' > /input.txt && bash init.sh < /input.txt"
+RUN bash -c "echo -e '\n\n\n\n\n\n\n\n' > /input.txt && bash init.sh < /input.txt"
 
 # 容器启动时以 linran 身份运行 user-init.sh
 USER linran
 WORKDIR /home/linran
-RUN rm -rf user-init.sh
-COPY --chown=linran:linran user-init.sh .
-RUN bash user-init.sh
+#RUN rm -rf user-init.sh
+#COPY --chown=linran:linran user-init.sh /home/linran/user-init.sh
+RUN bash -c "echo -e '\n\n\n\n\n\n\n\n' > input.txt && bash user-init.sh < input.txt"
 
 # 完成用户级操作后切换回 root
 USER root

@@ -16,9 +16,27 @@ main(){
   else
     echo "跳过安装docker和nginx"
   fi
+  user
 }
 
-
+check_os(){
+  if [ "$EUID" -eq 0 ]; then
+    echo "请以普通用户（非root）运行此脚本："
+    echo "bash user-init.sh"
+    exit 1
+  fi
+  if [ -f /etc/os-release ]; then
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    if [ "$ID" != "debian" ]; then
+      echo "此脚本仅支持Debian 13 (trixie)"
+      exit 1
+    elif [ "$VERSION_ID" != "13" ]; then
+      echo "此脚本仅支持Debian 13 (trixie)"
+      exit 1
+    fi
+  fi
+}
 
 install_tools(){
   install_zsh() {
@@ -123,7 +141,7 @@ install_pack(){
       "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian \
       $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
     sudo apt update
-    sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin docker-compose
+    sudo apt-get install -y docker-ce docker-ce-cli containerd.io
     sudo usermod -aG docker "$USERNAME"
     echo "正在配置docker镜像源"
     sudo mkdir -p /etc/docker
@@ -164,9 +182,9 @@ EOF
   serveice() {
     sudo mkdir -p /opt/service
     sudo chown "$USERNAME":docker /opt/service
-    sudo chmod 775 -R /opt/services
-    sudo chmod g+s /opt/services
-    sudo setfacl -d -m g::rwx /opt/services
+    sudo chmod 775 -R /opt/service
+    sudo chmod g+s /opt/service
+    sudo setfacl -d -m g::rwx /opt/service
     echo "/opt/service目录已创建，且用户$USERNAME 和docker组拥有该目录的读写权限"
 
   }
@@ -174,8 +192,16 @@ EOF
   nginx
   serveice
 }
+user(){
+  echo "============安装完成==============="
+  echo "请重新登录以应用用户组更改"
+  echo "用户名: $USERNAME"
+  echo "密码: 123456"
+  echo "公钥：$PUBLIC_KEY"
+  echo "=================================="
+}
 # ----------------------------------------工具
-
+# 判断是否在国内
 is_in_china() {
     [ "$force_cn" = 1 ] && return 0
     if ! command -v curl &> /dev/null; then
@@ -189,6 +215,22 @@ is_in_china() {
         echo "Location: $_loc" >&2
     fi
     [ "$_loc" = CN ]
+}
+# 
+curl() {
+    grep -o 'http[^ ]*' <<<"$@" >&2
+    for i in $(seq 5); do
+        if command curl --insecure --connect-timeout 10 -f "$@"; then
+            return
+        else
+            ret=$?
+            # 403 404 错误，或者达到重试次数
+            if [ $ret -eq 22 ] || [ $i -eq 5 ]; then
+                return $ret
+            fi
+            sleep 1
+        fi
+    done
 }
 
 is_docker() {
@@ -207,24 +249,7 @@ is_docker() {
     return 0
 }
 
-check_os(){
-  if [ "$EUID" -eq 0 ]; then
-    echo "请以普通用户（非root）运行此脚本："
-    echo "bash user-init.sh"
-    exit 1
-  fi
-  if [ -f /etc/os-release ]; then
-    # shellcheck disable=SC1091
-    . /etc/os-release
-    if [ "$ID" != "debian" ]; then
-      echo "此脚本仅支持Debian 13 (trixie)"
-      exit 1
-    elif [ "$VERSION_ID" != "13" ]; then
-      echo "此脚本仅支持Debian 13 (trixie)"
-      exit 1
-    fi
-  fi
-}
+
 
 error_and_exit() {
     echo "$@"
